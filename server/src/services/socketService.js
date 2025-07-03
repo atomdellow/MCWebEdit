@@ -13,15 +13,19 @@ export function setupSocketIO(io) {
     socket.on('join-model', (modelId, userName) => {
       const roomName = `model-${modelId}`;
       
+      console.log(`🏠 User ${socket.id} attempting to join model ${modelId} as ${userName}`);
+      
       // Leave any previous rooms
       Array.from(socket.rooms).forEach(room => {
         if (room !== socket.id && room.startsWith('model-')) {
           socket.leave(room);
+          console.log(`🚪 User ${socket.id} left room ${room}`);
         }
       });
       
       // Join the new room
       socket.join(roomName);
+      console.log(`✅ User ${socket.id} joined room ${roomName}`);
       
       // Track user in room
       if (!activeRooms.has(roomName)) {
@@ -44,13 +48,15 @@ export function setupSocketIO(io) {
       // Send current active users to the joining user
       socket.emit('room-users', roomUsers);
       
-      console.log(`👥 User ${socket.id} joined model ${modelId}`);
+      console.log(`👥 User ${socket.id} joined model ${modelId}, room has ${roomUsers.length} users`);
     });
     
     // Handle block placement/removal
-    socket.on('block-change', (data) => {
-      const { modelId, x, y, z, blockType, blockData, properties, userName } = data;
+    socket.on('block-change', (modelId, data) => {
+      const { x, y, z, blockType, blockData, properties } = data;
       const roomName = `model-${modelId}`;
+      
+      console.log(`🧱 Received block change for model ${modelId}:`, data);
       
       // Validate block position and type
       if (!Number.isInteger(x) || !Number.isInteger(y) || !Number.isInteger(z)) {
@@ -58,15 +64,18 @@ export function setupSocketIO(io) {
         return;
       }
       
+      // Get user info
+      const userName = activeRooms.get(roomName)?.get(socket.id)?.userName || `User-${socket.id.substring(0, 6)}`;
+      
       // Broadcast block change to other users in the room
       socket.to(roomName).emit('block-changed', {
         x, y, z, blockType, blockData, properties,
         userId: socket.id,
-        userName: userName || `User-${socket.id.substring(0, 6)}`,
+        userName: userName,
         timestamp: new Date()
       });
       
-      console.log(`🧱 Block change in model ${modelId}: (${x},${y},${z}) -> ${blockType}`);
+      console.log(`🧱 Block change in model ${modelId}: (${x},${y},${z}) -> ${blockType} by ${userName}`);
     });
     
     // Handle cursor/selection updates

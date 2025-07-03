@@ -113,7 +113,7 @@
 </template>
 
 <script>
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch, markRaw, toRaw } from 'vue'
 import { useRoute } from 'vue-router'
 import { useVoxelStore } from '@/stores/voxelStore'
 import apiService from '@/services/apiService'
@@ -174,14 +174,41 @@ export default {
           throw new Error('No model ID provided')
         }
         
+        console.log('🔄 Loading model:', modelId)
         const model = await apiService.getModel(modelId)
+        console.log('✅ Model loaded:', model)
         voxelStore.setCurrentModel(model)
         
-        // Connect to socket and join room
+        // Connect to socket first
         socketService.connect()
-        socketService.joinModel(modelId, `User-${Date.now()}`)
+        
+        // Wait for connection before joining room
+        const maxRetries = 5
+        let retryCount = 0
+        
+        const waitForConnection = () => {
+          return new Promise((resolve, reject) => {
+            const checkConnection = () => {
+              if (socketService.socket?.connected) {
+                console.log('🏠 Joining model room:', modelId)
+                socketService.joinModel(modelId, `User-${Date.now()}`)
+                resolve()
+              } else if (retryCount < maxRetries) {
+                retryCount++
+                console.log(`⏳ Waiting for socket connection... (${retryCount}/${maxRetries})`)
+                setTimeout(checkConnection, 1000)
+              } else {
+                reject(new Error('Socket connection timeout after ' + maxRetries + ' retries'))
+              }
+            }
+            checkConnection()
+          })
+        }
+        
+        await waitForConnection()
         
       } catch (err) {
+        console.error('❌ Failed to load model:', err)
         error.value = `Failed to load model: ${err.message}`
       } finally {
         isLoading.value = false
@@ -191,35 +218,74 @@ export default {
     const initializeThreeJS = () => {
       if (!threeCanvas.value) return
       
-      voxelRenderer.value = new VoxelRenderer(threeCanvas.value)
-      voxelRenderer.value.setVoxelStore(voxelStore)
+      console.log('🎨 Initializing Three.js with raw canvas element')
+      
+      // Get the raw DOM element, not the Vue ref
+      const rawCanvas = threeCanvas.value
+      
+      // Create renderer completely outside Vue's reactivity system
+      // We don't assign it to a ref to avoid Vue proxying
+      const renderer = markRaw(new VoxelRenderer(rawCanvas))
+      
+      // Store in a non-reactive property
+      Object.defineProperty(window, 'mcWebEditRenderer', {
+        value: renderer,
+        writable: true,
+        enumerable: false,
+        configurable: true
+      })
+      
+      // Store reference in component but mark as non-reactive
+      voxelRenderer.value = renderer
+      
+      // Use toRaw to strip reactivity from the entire store before passing it
+      const rawStore = toRaw(voxelStore)
+      console.log('📦 Setting voxel store (raw):', rawStore)
+      console.log('📦 Current model:', rawStore.currentModel)
+      console.log('📦 Model dimensions computed:', rawStore.modelDimensions)
+      renderer.setVoxelStore(rawStore)
       
       // Set up event listeners
-      voxelRenderer.value.onBlockHover = (position) => {
+      renderer.onBlockHover = (position) => {
         hoveredBlock.value = position
       }
       
-      voxelRenderer.value.onBlockClick = (position, isRightClick) => {
+      renderer.onBlockClick = (position, isRightClick) => {
         handleBlockClick(position, isRightClick)
       }
       
-      voxelRenderer.value.onCameraMove = (position, target) => {
-        voxelStore.setCameraPosition(position)
-        voxelStore.setCameraTarget(target)
+      renderer.onCameraMove = (position, target) => {
+        // Create completely new objects to avoid proxy issues
+        const newPosition = { x: position.x, y: position.y, z: position.z }
+        const newTarget = { x: target.x, y: target.y, z: target.z }
+        voxelStore.setCameraPosition(newPosition)
+        voxelStore.setCameraTarget(newTarget)
       }
       
-      // Start render loop
-      voxelRenderer.value.startRenderLoop()
+      console.log('✅ Three.js initialization complete')
     }
     
     const handleBlockClick = (position, isRightClick) => {
       const { x, y, z } = position
+      
+      console.log('🖱️ handleBlockClick called:', { x, y, z, isRightClick })
+      console.log('🔗 isConnected:', isConnected.value)
+      console.log('🛠️ selectedTool:', selectedTool.value)
+      console.log('🧱 selectedBlockType:', selectedBlockType.value)
+      
+      // Check if socket is connected
+      if (!isConnected.value) {
+        error.value = 'Cannot place blocks: Not connected to server'
+        console.log('❌ Not connected to server')
+        return
+      }
       
       // Check bounds
       const dims = modelDimensions.value
       if (x < 0 || x >= dims.width || 
           y < 0 || y >= dims.height || 
           z < 0 || z >= dims.length) {
+        console.log('❌ Block position out of bounds:', { x, y, z }, 'Dims:', dims)
         return
       }
       
@@ -231,18 +297,36 @@ export default {
         newBlockType = 'minecraft:air'
       }
       
+      console.log('🧱 Block placement logic result:', { 
+        selectedTool: selectedTool.value, 
+        isRightClick, 
+        newBlockType 
+      })
+      
       // Update local store
+      console.log('📝 Updating local store...')
       voxelStore.setBlock(x, y, z, newBlockType)
+      
+      // Update renderer immediately
+      console.log('🎨 Updating renderer...')
+      const renderer = voxelRenderer.value || window.mcWebEditRenderer
+      if (renderer) {
+        renderer.updateSingleBlock(x, y, z, newBlockType)
+      } else {
+        console.log('❌ voxelRenderer is null!')
+      }
       
       // Send to server and other clients
       try {
+        console.log('📡 Sending to server...')
         socketService.sendBlockChange(x, y, z, newBlockType)
         // Note: We don't await the API call to keep interactions snappy
         // The socket update will handle real-time sync
         apiService.setBlock(currentModel.value.id, x, y, z, newBlockType)
+        console.log('✅ Block change sent successfully')
       } catch (err) {
-        console.error('Failed to sync block change:', err)
-        // Could implement retry logic here
+        console.error('❌ Failed to sync block change:', err)
+        error.value = `Failed to sync block change: ${err.message}`
       }
     }
     
@@ -286,10 +370,12 @@ export default {
     // Socket event handlers
     const setupSocketListeners = () => {
       socketService.on('connection-status', (connected) => {
+        console.log('🔌 Connection status changed:', connected)
         voxelStore.setConnectionStatus(connected)
       })
       
       socketService.on('room-users', (users) => {
+        console.log('👥 Room users updated:', users)
         voxelStore.setActiveUsers(users)
       })
       
@@ -313,7 +399,17 @@ export default {
       
       socketService.on('block-changed', (data) => {
         // Update from other users
+        console.log('🔄 Received block change from other user:', data)
         voxelStore.setBlock(data.x, data.y, data.z, data.blockType, data.blockData, data.properties)
+        
+        // Update renderer immediately
+        console.log('🎨 Updating renderer from socket event...')
+        const renderer = voxelRenderer.value || window.mcWebEditRenderer
+        if (renderer) {
+          renderer.updateSingleBlock(data.x, data.y, data.z, data.blockType)
+        } else {
+          console.log('❌ voxelRenderer is null in socket handler!')
+        }
       })
       
       socketService.on('chat-message', (data) => {
@@ -333,14 +429,18 @@ export default {
     
     // Lifecycle
     onMounted(async () => {
+      // Initialize connection status
+      voxelStore.setConnectionStatus(false)
+      
+      setupSocketListeners()
       await loadModel()
       initializeThreeJS()
-      setupSocketListeners()
       
       // Handle window resize
       const handleResize = () => {
-        if (voxelRenderer.value) {
-          voxelRenderer.value.handleResize()
+        const renderer = voxelRenderer.value || window.mcWebEditRenderer
+        if (renderer) {
+          renderer.handleResize()
         }
       }
       
@@ -353,8 +453,14 @@ export default {
     })
     
     onUnmounted(() => {
-      if (voxelRenderer.value) {
-        voxelRenderer.value.dispose()
+      const renderer = voxelRenderer.value || window.mcWebEditRenderer
+      if (renderer) {
+        renderer.dispose()
+      }
+      
+      // Clean up the global reference
+      if (window.mcWebEditRenderer) {
+        delete window.mcWebEditRenderer
       }
       
       socketService.leaveModel()
@@ -365,12 +471,15 @@ export default {
       }
     })
     
-    // Watch for blocks changes to update renderer
-    watch(() => voxelStore.blocks, () => {
-      if (voxelRenderer.value) {
-        voxelRenderer.value.updateVoxels()
+    // Watch for dimension changes to update renderer
+    watch(() => voxelStore.modelDimensions, (newDims) => {
+      const renderer = voxelRenderer.value || window.mcWebEditRenderer
+      if (renderer && newDims) {
+        renderer.updateDimensions(newDims)
       }
     }, { deep: true })
+    
+    // Note: Block changes are now handled via updateSingleBlock for performance
     
     return {
       // Refs

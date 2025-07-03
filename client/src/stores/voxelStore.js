@@ -20,12 +20,25 @@ export const useVoxelStore = defineStore('voxel', () => {
   
   // Getters
   const modelDimensions = computed(() => {
-    if (!currentModel.value) return { width: 16, height: 16, length: 16 }
-    return {
-      width: currentModel.value.dimensions.width,
-      height: currentModel.value.dimensions.height,
-      length: currentModel.value.dimensions.length
+    if (!currentModel.value) {
+      console.log('🚫 No current model, using default dimensions')
+      return { width: 50, height: 50, length: 50 }
     }
+    
+    if (!currentModel.value.dimensions) {
+      console.log('🚫 Current model has no dimensions property, using default')
+      console.log('🔍 Current model:', currentModel.value)
+      return { width: 50, height: 50, length: 50 }
+    }
+    
+    const dims = {
+      width: currentModel.value.dimensions.width || 50,
+      height: currentModel.value.dimensions.height || 50,
+      length: currentModel.value.dimensions.length || 50
+    }
+    
+    console.log('✅ Model dimensions computed:', dims)
+    return dims
   })
   
   const totalBlocks = computed(() => blocks.value.size)

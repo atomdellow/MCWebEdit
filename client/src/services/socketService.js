@@ -10,9 +10,12 @@ class SocketService {
   
   connect(serverUrl = 'http://localhost:3001') {
     if (this.socket?.connected) {
+      console.log('🔌 Already connected to server')
+      this.emit('connection-status', true)
       return this.socket
     }
     
+    console.log('🔌 Connecting to server at', serverUrl)
     this.socket = io(serverUrl, {
       transports: ['websocket', 'polling']
     })
@@ -80,12 +83,14 @@ class SocketService {
   
   joinModel(modelId, userName = null) {
     if (!this.socket?.connected) {
+      console.error('❌ Cannot join model: Socket not connected')
       throw new Error('Socket not connected')
     }
     
     this.currentModelId = modelId
     this.userName = userName || `User-${Date.now()}`
     
+    console.log('🏠 Joining model room:', modelId, 'as', this.userName)
     this.socket.emit('join-model', modelId, this.userName)
   }
   
@@ -98,14 +103,13 @@ class SocketService {
   
   sendBlockChange(x, y, z, blockType, blockData = 0, properties = {}) {
     if (!this.socket?.connected || !this.currentModelId) {
-      throw new Error('Not connected to a model')
+      console.error('❌ Cannot send block change: Socket not connected or no model joined')
+      throw new Error('Socket not connected or no model joined')
     }
     
-    this.socket.emit('block-change', {
-      modelId: this.currentModelId,
-      x, y, z, blockType, blockData, properties,
-      userName: this.userName
-    })
+    const data = { x, y, z, blockType, blockData, properties }
+    console.log('🧱 Sending block change:', data)
+    this.socket.emit('block-change', this.currentModelId, data)
   }
   
   sendBulkOperation(operation, blocks, area = null) {
