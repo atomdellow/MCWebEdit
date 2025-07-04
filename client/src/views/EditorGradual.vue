@@ -24,15 +24,40 @@
         
         <div class="toolbar-center">
           <div class="tool-group">
-            <button 
-              v-for="tool in tools" 
-              :key="tool.id"
-              @click="setSelectedTool(tool.id)"
-              :class="['btn', { active: selectedTool === tool.id }]"
-              :title="tool.name"
-            >
-              {{ tool.icon }}
-            </button>
+            <template v-for="tool in tools" :key="tool.id">
+              <!-- Regular tool button -->
+              <button 
+                v-if="!tool.isDropdown"
+                @click="setSelectedTool(tool.id)"
+                :class="['btn', { active: selectedTool === tool.id }]"
+                :title="tool.name"
+              >
+                {{ tool.icon }}
+              </button>
+              
+              <!-- Dropdown tool button -->
+              <div v-else class="dropdown-tool" :class="{ active: selectedTool === tool.id }">
+                <button 
+                  @click="toggleShapeDropdown"
+                  :class="['btn', { active: selectedTool === tool.id }]"
+                  :title="tool.name"
+                >
+                  {{ selectedTool === tool.id ? getSelectedShapeIcon() : tool.icon }}
+                  <span class="dropdown-arrow">▼</span>
+                </button>
+                
+                <div v-if="showShapeDropdown && selectedTool === tool.id" class="dropdown-menu">
+                  <button 
+                    v-for="shape in tool.options" 
+                    :key="shape.id"
+                    @click="selectShape(shape.id)"
+                    :class="['dropdown-item', { active: selectedShape === shape.id }]"
+                  >
+                    {{ shape.icon }} {{ shape.name }}
+                  </button>
+                </div>
+              </div>
+            </template>
           </div>
           
           <!-- Tool Help -->
@@ -42,6 +67,7 @@
             <span v-else-if="selectedTool === 'select'">Left: Start/End Selection | Right: Clear</span>
             <span v-else-if="selectedTool === 'fill'">Left: Fill | Right: Clear Fill</span>
             <span v-else-if="selectedTool === 'copy'">Left: Copy Selection | Right: Paste</span>
+            <span v-else-if="selectedTool === 'shapes'">Click and drag to create {{ getSelectedShapeName() }}</span>
           </div>
         </div>
         
@@ -209,8 +235,27 @@ export default {
       { id: 'remove', name: 'Remove Block', icon: '🗑️' },
       { id: 'select', name: 'Select', icon: '👆' },
       { id: 'fill', name: 'Fill Tool', icon: '🪣' },
-      { id: 'copy', name: 'Copy/Paste', icon: '📋' }
+      { id: 'copy', name: 'Copy/Paste', icon: '📋' },
+      { 
+        id: 'shapes', 
+        name: 'Shapes', 
+        icon: '📐',
+        isDropdown: true,
+        options: [
+          { id: 'box', name: 'Box', icon: '📦' },
+          { id: 'sphere', name: 'Sphere', icon: '🔮' },
+          { id: 'cylinder', name: 'Cylinder', icon: '🥫' },
+          { id: 'pyramid', name: 'Pyramid', icon: '🔺' },
+          { id: 'slab', name: 'Flat Slab', icon: '📄' },
+          { id: 'round_slab', name: 'Round Slab', icon: '🎯' },
+          { id: 'path', name: 'Path', icon: '🛤️' }
+        ]
+      }
     ]
+    
+    // Shape tool state
+    const selectedShape = ref('box')
+    const showShapeDropdown = ref(false)
     
     // Three.js objects - stored outside Vue's reactivity system
     let scene = null
@@ -439,6 +484,8 @@ export default {
         handleSelectTool(x, y, z, isRightClick)
       } else if (tool === 'copy') {
         handleCopyTool(x, y, z, isRightClick)
+      } else if (tool === 'shapes') {
+        handleShapeTool(x, y, z, isRightClick)
       }
     }
     
@@ -639,6 +686,178 @@ export default {
       }
     }
     
+    const handleShapeTool = (x, y, z, isRightClick) => {
+      if (isRightClick) {
+        // Right click clears any active shape operation
+        // For future drag-to-create shapes, this could cancel the operation
+        return
+      }
+      
+      const blockType = selectedBlockType.value
+      const shape = selectedShape.value
+      
+      console.log(`🔺 Shape tool: Creating ${shape} at (${x}, ${y}, ${z}) with block ${blockType}`)
+      
+      // Generate blocks based on selected shape
+      const blocks = generateShapeBlocks(shape, x, y, z)
+      
+      // Place all blocks
+      blocks.forEach(block => {
+        placeSingleBlock(block.x, block.y, block.z, blockType)
+      })
+      
+      console.log(`🔺 Shape tool: Placed ${blocks.length} blocks`)
+    }
+    
+    const generateShapeBlocks = (shape, centerX, centerY, centerZ) => {
+      switch (shape) {
+        case 'box':
+          return generateBox(centerX, centerY, centerZ, 3, 3, 3)
+        case 'sphere':
+          return generateSphere(centerX, centerY, centerZ, 3)
+        case 'cylinder':
+          return generateCylinder(centerX, centerY, centerZ, 2, 4)
+        case 'pyramid':
+          return generatePyramid(centerX, centerY, centerZ, 5)
+        case 'slab':
+          return generateSlab(centerX, centerY, centerZ, 5, 5)
+        case 'round_slab':
+          return generateRoundSlab(centerX, centerY, centerZ, 3)
+        case 'path':
+          return generatePath(centerX, centerY, centerZ, 7)
+        default:
+          return []
+      }
+    }
+    
+    const generateBox = (centerX, centerY, centerZ, width, height, depth) => {
+      const blocks = []
+      const halfW = Math.floor(width / 2)
+      const halfH = Math.floor(height / 2)
+      const halfD = Math.floor(depth / 2)
+      
+      for (let x = centerX - halfW; x <= centerX + halfW; x++) {
+        for (let y = centerY - halfH; y <= centerY + halfH; y++) {
+          for (let z = centerZ - halfD; z <= centerZ + halfD; z++) {
+            blocks.push({ x, y, z })
+          }
+        }
+      }
+      
+      return blocks
+    }
+    
+    const generateSphere = (centerX, centerY, centerZ, radius) => {
+      const blocks = []
+      const radiusSquared = radius * radius
+      
+      for (let x = centerX - radius; x <= centerX + radius; x++) {
+        for (let y = centerY - radius; y <= centerY + radius; y++) {
+          for (let z = centerZ - radius; z <= centerZ + radius; z++) {
+            const dx = x - centerX
+            const dy = y - centerY
+            const dz = z - centerZ
+            const distanceSquared = dx * dx + dy * dy + dz * dz
+            
+            if (distanceSquared <= radiusSquared) {
+              blocks.push({ x, y, z })
+            }
+          }
+        }
+      }
+      
+      return blocks
+    }
+    
+    const generateCylinder = (centerX, centerY, centerZ, radius, height) => {
+      const blocks = []
+      const radiusSquared = radius * radius
+      const halfHeight = Math.floor(height / 2)
+      
+      for (let x = centerX - radius; x <= centerX + radius; x++) {
+        for (let z = centerZ - radius; z <= centerZ + radius; z++) {
+          const dx = x - centerX
+          const dz = z - centerZ
+          const distanceSquared = dx * dx + dz * dz
+          
+          if (distanceSquared <= radiusSquared) {
+            for (let y = centerY - halfHeight; y <= centerY + halfHeight; y++) {
+              blocks.push({ x, y, z })
+            }
+          }
+        }
+      }
+      
+      return blocks
+    }
+    
+    const generatePyramid = (centerX, centerY, centerZ, baseSize) => {
+      const blocks = []
+      const halfBase = Math.floor(baseSize / 2)
+      const height = halfBase + 1
+      
+      for (let level = 0; level < height; level++) {
+        const levelSize = baseSize - (level * 2)
+        if (levelSize <= 0) break
+        
+        const halfLevel = Math.floor(levelSize / 2)
+        const y = centerY + level
+        
+        for (let x = centerX - halfLevel; x <= centerX + halfLevel; x++) {
+          for (let z = centerZ - halfLevel; z <= centerZ + halfLevel; z++) {
+            blocks.push({ x, y, z })
+          }
+        }
+      }
+      
+      return blocks
+    }
+    
+    const generateSlab = (centerX, centerY, centerZ, width, depth) => {
+      const blocks = []
+      const halfW = Math.floor(width / 2)
+      const halfD = Math.floor(depth / 2)
+      
+      for (let x = centerX - halfW; x <= centerX + halfW; x++) {
+        for (let z = centerZ - halfD; z <= centerZ + halfD; z++) {
+          blocks.push({ x, y: centerY, z })
+        }
+      }
+      
+      return blocks
+    }
+    
+    const generateRoundSlab = (centerX, centerY, centerZ, radius) => {
+      const blocks = []
+      const radiusSquared = radius * radius
+      
+      for (let x = centerX - radius; x <= centerX + radius; x++) {
+        for (let z = centerZ - radius; z <= centerZ + radius; z++) {
+          const dx = x - centerX
+          const dz = z - centerZ
+          const distanceSquared = dx * dx + dz * dz
+          
+          if (distanceSquared <= radiusSquared) {
+            blocks.push({ x, y: centerY, z })
+          }
+        }
+      }
+      
+      return blocks
+    }
+    
+    const generatePath = (centerX, centerY, centerZ, length) => {
+      const blocks = []
+      const halfLength = Math.floor(length / 2)
+      
+      // Create a straight path along the X axis
+      for (let x = centerX - halfLength; x <= centerX + halfLength; x++) {
+        blocks.push({ x, y: centerY, z: centerZ })
+      }
+      
+      return blocks
+    }
+    
     const sendChatMessage = (message) => {
       try {
         socketService.sendChatMessage(message)
@@ -653,6 +872,35 @@ export default {
     
     const setSelectedTool = (toolId) => {
       voxelStore.setSelectedTool(toolId)
+      if (toolId !== 'shapes') {
+        showShapeDropdown.value = false
+      }
+    }
+    
+    // Shape dropdown functions
+    const toggleShapeDropdown = () => {
+      if (selectedTool.value !== 'shapes') {
+        setSelectedTool('shapes')
+      }
+      showShapeDropdown.value = !showShapeDropdown.value
+    }
+    
+    const selectShape = (shapeId) => {
+      selectedShape.value = shapeId
+      showShapeDropdown.value = false
+      setSelectedTool('shapes')
+    }
+    
+    const getSelectedShapeIcon = () => {
+      const shapeTool = tools.find(t => t.id === 'shapes')
+      const shape = shapeTool?.options?.find(s => s.id === selectedShape.value)
+      return shape?.icon || '📐'
+    }
+    
+    const getSelectedShapeName = () => {
+      const shapeTool = tools.find(t => t.id === 'shapes')
+      const shape = shapeTool?.options?.find(s => s.id === selectedShape.value)
+      return shape?.name || 'shape'
     }
     
     const getCurrentTool = () => {
@@ -777,6 +1025,8 @@ export default {
       isSelecting,
       clipboard,
       threeContainer,
+      selectedShape,
+      showShapeDropdown,
       
       // Computed
       currentModel,
@@ -796,7 +1046,11 @@ export default {
       getCurrentTool,
       clearError,
       getBlockName,
-      getSelectionSize
+      getSelectionSize,
+      toggleShapeDropdown,
+      selectShape,
+      getSelectedShapeIcon,
+      getSelectedShapeName
     }
   }
 }
@@ -1056,5 +1310,59 @@ export default {
   border-radius: 4px;
   margin-bottom: 4px;
   font-size: 12px;
+}
+
+/* Dropdown Styles */
+.dropdown-tool {
+  position: relative;
+  display: inline-block;
+}
+
+.dropdown-arrow {
+  margin-left: 4px;
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+  min-width: 150px;
+  margin-top: 2px;
+}
+
+.dropdown-item {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  color: white;
+  text-align: left;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.dropdown-item:hover {
+  background: #3a3a3a;
+}
+
+.dropdown-item.active {
+  background: #4CAF50;
+}
+
+.dropdown-item:first-child {
+  border-radius: 4px 4px 0 0;
+}
+
+.dropdown-item:last-child {
+  border-radius: 0 0 4px 4px;
 }
 </style>

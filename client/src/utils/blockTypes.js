@@ -1,8 +1,8 @@
 // Minecraft block definitions and textures
 export const BLOCK_TYPES = {
   'minecraft:air': {
-    name: 'Air',
-    color: 0x000000,
+    name: 'Air (Erase)',
+    color: 0x222222,
     transparent: true
   },
   'minecraft:stone': {
@@ -109,6 +109,7 @@ export const BLOCK_CATEGORIES = {
     'minecraft:obsidian'
   ],
   'Natural': [
+    'minecraft:air',
     'minecraft:grass_block',
     'minecraft:dirt',
     'minecraft:sand',

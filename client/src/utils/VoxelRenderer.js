@@ -397,28 +397,48 @@ export default class VoxelRenderer {
         this.keys.up = true
         break
         
-      // Manual highlight positioning
+      // Manual highlight positioning (camera-relative)
       case 'arrowleft':
         if (this.manualHighlightMode) {
-          this.moveHighlightManually(-1, 0, 0)
+          // Move left relative to camera
+          const rightVector = new THREE.Vector3()
+          rightVector.setFromMatrixColumn(this.camera.matrixWorld, 0)
+          const deltaX = Math.round(-rightVector.x)
+          const deltaZ = Math.round(-rightVector.z)
+          this.moveHighlightManually(deltaX, 0, deltaZ)
           event.preventDefault()
         }
         break
       case 'arrowright':
         if (this.manualHighlightMode) {
-          this.moveHighlightManually(1, 0, 0)
+          // Move right relative to camera
+          const rightVector = new THREE.Vector3()
+          rightVector.setFromMatrixColumn(this.camera.matrixWorld, 0)
+          const deltaX = Math.round(rightVector.x)
+          const deltaZ = Math.round(rightVector.z)
+          this.moveHighlightManually(deltaX, 0, deltaZ)
           event.preventDefault()
         }
         break
       case 'arrowup':
         if (this.manualHighlightMode) {
-          this.moveHighlightManually(0, 0, -1)
+          // Move forward relative to camera
+          const forwardVector = new THREE.Vector3()
+          this.camera.getWorldDirection(forwardVector)
+          const deltaX = Math.round(-forwardVector.x)
+          const deltaZ = Math.round(-forwardVector.z)
+          this.moveHighlightManually(deltaX, 0, deltaZ)
           event.preventDefault()
         }
         break
       case 'arrowdown':
         if (this.manualHighlightMode) {
-          this.moveHighlightManually(0, 0, 1)
+          // Move backward relative to camera
+          const forwardVector = new THREE.Vector3()
+          this.camera.getWorldDirection(forwardVector)
+          const deltaX = Math.round(forwardVector.x)
+          const deltaZ = Math.round(forwardVector.z)
+          this.moveHighlightManually(deltaX, 0, deltaZ)
           event.preventDefault()
         }
         break

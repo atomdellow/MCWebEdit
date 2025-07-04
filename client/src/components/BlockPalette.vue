@@ -86,7 +86,14 @@ export default {
     const selectBlock = (blockType) => {
       console.log(`🎨 BlockPalette: selectBlock called with ${blockType}`)
       console.log(`🎨 BlockPalette: current selectedBlockType prop is ${props.selectedBlockType}`)
-      emit('select-block', blockType)
+      
+      // Allow deselection by clicking the same block again
+      if (props.selectedBlockType === blockType) {
+        console.log(`🎨 BlockPalette: Deselecting ${blockType}`)
+        emit('select-block', null) // Deselect
+      } else {
+        emit('select-block', blockType)
+      }
     }
     
     const getBlockColorHex = (blockType) => {
