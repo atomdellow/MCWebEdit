@@ -104,7 +104,9 @@ export const useVoxelStore = defineStore('voxel', () => {
   }
   
   function setSelectedBlockType(blockType) {
+    console.log(`🏪 voxelStore.setSelectedBlockType called with: ${blockType}`)
     selectedBlockType.value = blockType
+    console.log(`🏪 selectedBlockType.value is now: ${selectedBlockType.value}`)
   }
   
   function setSelectedTool(tool) {

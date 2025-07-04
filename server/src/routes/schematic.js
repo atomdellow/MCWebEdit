@@ -1,5 +1,6 @@
 import express from 'express';
 import multer from 'multer';
+import mongoose from 'mongoose';
 import VoxelModel from '../models/VoxelModel.js';
 import { SchematicService } from '../services/schematicService.js';
 
@@ -98,12 +99,21 @@ router.post('/upload-schematic', upload.single('schematic'), async (req, res) =>
  */
 router.get('/model/:id', async (req, res) => {
   try {
+    // Validate ObjectId format
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      console.log('❌ Invalid ObjectId format:', req.params.id);
+      return res.status(400).json({ error: 'Invalid model ID format' });
+    }
+    
+    console.log('🔍 Getting model with ID:', req.params.id);
     const model = await VoxelModel.findById(req.params.id);
     
     if (!model) {
+      console.log('❌ Model not found:', req.params.id);
       return res.status(404).json({ error: 'Model not found' });
     }
     
+    console.log('✅ Model found:', model.name);
     res.json({
       id: model._id,
       name: model.name,
@@ -334,6 +344,7 @@ router.post('/model/:id/block', async (req, res) => {
  */
 router.post('/create-empty', async (req, res) => {
   try {
+    console.log('🎯 Creating new empty model:', req.body);
     const { name, description, width, height, length } = req.body;
     
     // Validate dimensions
@@ -359,6 +370,8 @@ router.post('/create-empty', async (req, res) => {
     });
     
     await voxelModel.save();
+    
+    console.log('✅ Model created successfully:', voxelModel._id);
     
     res.json({
       success: true,

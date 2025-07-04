@@ -25,7 +25,7 @@
             v-for="blockType in blocks" 
             :key="blockType"
             @click="selectBlock(blockType)"
-            :class="['block-item', { selected: selectedBlock === blockType }]"
+            :class="['block-item', { selected: selectedBlockType === blockType }]"
             :title="getBlockName(blockType)"
           >
             <div 
@@ -47,12 +47,12 @@ import { BLOCK_CATEGORIES, getBlockName, getBlockColor } from '@/utils/blockType
 export default {
   name: 'BlockPalette',
   props: {
-    selectedBlock: {
+    selectedBlockType: {
       type: String,
       default: 'minecraft:stone'
     }
   },
-  emits: ['block-selected'],
+  emits: ['select-block'],
   setup(props, { emit }) {
     const searchQuery = ref('')
     const expandedCategories = ref(new Set(['Building']))
@@ -84,7 +84,9 @@ export default {
     }
     
     const selectBlock = (blockType) => {
-      emit('block-selected', blockType)
+      console.log(`🎨 BlockPalette: selectBlock called with ${blockType}`)
+      console.log(`🎨 BlockPalette: current selectedBlockType prop is ${props.selectedBlockType}`)
+      emit('select-block', blockType)
     }
     
     const getBlockColorHex = (blockType) => {

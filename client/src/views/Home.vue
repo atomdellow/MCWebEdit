@@ -246,8 +246,9 @@ export default {
         )
         
         // Navigate to editor
-        router.push(`/editor/${response.modelId}`)
+        await router.push(`/editor/${response.modelId}`)
       } catch (err) {
+        console.error('❌ Failed to create model:', err)
         error.value = `Failed to create model: ${err.message}`
       } finally {
         isCreating.value = false

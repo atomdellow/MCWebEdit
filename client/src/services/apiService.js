@@ -103,7 +103,8 @@ class ApiService {
       throw new Error(error.message || 'Failed to create model')
     }
     
-    return response.json()
+    const result = await response.json();
+    return result;
   }
   
   async setBlock(modelId, x, y, z, blockType, blockData = 0, properties = {}) {

@@ -17,91 +17,25 @@
             ← Back
           </button>
           <span class="model-name">{{ currentModel?.name || 'Untitled' }}</span>
-          <span class="connection-status" :class="{ connected: isConnected }">
-            {{ isConnected ? '🟢 Connected' : '🔴 Disconnected' }}
-          </span>
-        </div>
-        
-        <div class="toolbar-center">
-          <div class="tool-group">
-            <button 
-              v-for="tool in tools" 
-              :key="tool.id"
-              @click="setSelectedTool(tool.id)"
-              :class="['btn', { active: selectedTool === tool.id }]"
-              :title="tool.name"
-            >
-              {{ tool.icon }}
-            </button>
-          </div>
         </div>
         
         <div class="toolbar-right">
           <button @click="exportModel" class="btn" :disabled="isExporting">
             {{ isExporting ? 'Exporting...' : '💾 Export' }}
           </button>
-          <button @click="showChatPanel = !showChatPanel" class="btn btn-secondary">
-            💬 Chat
-          </button>
         </div>
       </div>
       
-      <!-- Main Content Area -->
-      <div class="content-area">
-        <!-- Block Palette -->
-        <div class="left-panel panel">
-          <BlockPalette 
-            :selected-block="selectedBlockType"
-            @block-selected="setSelectedBlockType"
-          />
-        </div>
-        
-        <!-- 3D Viewport -->
-        <div class="viewport-container">
-          <canvas ref="threeCanvas" class="three-canvas"></canvas>
-          
-          <!-- Viewport Overlay -->
-          <div class="viewport-overlay">
-            <div class="viewport-info">
-              <div>{{ totalBlocks }} blocks</div>
-              <div>{{ modelDimensions.width }}×{{ modelDimensions.height }}×{{ modelDimensions.length }}</div>
-              <div v-if="hoveredBlock">
-                Hover: ({{ hoveredBlock.x }}, {{ hoveredBlock.y }}, {{ hoveredBlock.z }})
-              </div>
-            </div>
-            
-            <!-- Active Users -->
-            <div v-if="activeUsers.length > 0" class="active-users">
-              <div class="users-header">Active Users:</div>
-              <div 
-                v-for="user in activeUsers" 
-                :key="user.userId"
-                class="user-indicator"
-              >
-                {{ user.userName }}
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Chat Panel -->
-        <div v-if="showChatPanel" class="right-panel panel">
-          <ChatPanel 
-            :messages="chatMessages"
-            @send-message="sendChatMessage"
-          />
-        </div>
+      <!-- Debug Info -->
+      <div class="debug-info">
+        <p>Model ID: {{ modelId }}</p>
+        <p>Model loaded: {{ currentModel?.name || 'None' }}</p>
+        <p>Dimensions: {{ currentModel?.dimensions?.width || 0 }}x{{ currentModel?.dimensions?.height || 0 }}x{{ currentModel?.dimensions?.length || 0 }}</p>
       </div>
       
-      <!-- Bottom Status Bar -->
-      <div class="status-bar">
-        <div class="status-left">
-          Tool: {{ getCurrentTool()?.name }}
-          | Block: {{ getBlockName(selectedBlockType) }}
-        </div>
-        <div class="status-right">
-          Camera: ({{ Math.round(cameraPosition.x) }}, {{ Math.round(cameraPosition.y) }}, {{ Math.round(cameraPosition.z) }})
-        </div>
+      <!-- 3D Viewport Container -->
+      <div class="viewport-container">
+        <div ref="threeContainer" class="three-container"></div>
       </div>
     </div>
     
@@ -113,60 +47,46 @@
 </template>
 
 <script>
-import { ref, onMounted, onUnmounted, computed, watch, markRaw, toRaw } from 'vue'
+import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useVoxelStore } from '@/stores/voxelStore'
 import apiService from '@/services/apiService'
-import socketService from '@/services/socketService'
-import { getBlockName } from '@/utils/blockTypes'
-import BlockPalette from '@/components/BlockPalette.vue'
-import ChatPanel from '@/components/ChatPanel.vue'
-import VoxelRenderer from '@/utils/VoxelRenderer'
+import * as THREE from 'three'
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+
+console.log('📦 Editor.vue: Module loaded!');
 
 export default {
   name: 'Editor',
-  components: {
-    BlockPalette,
-    ChatPanel
-  },
   props: {
     modelId: String
   },
   setup(props) {
+    console.log('🚀 Editor: Setup function called!');
+    console.log('🚀 Editor: Props received:', props);
+    
     const route = useRoute()
     const voxelStore = useVoxelStore()
     
     // Refs
-    const threeCanvas = ref(null)
-    const voxelRenderer = ref(null)
     const isLoading = ref(true)
-    const isExporting = ref(false)
     const error = ref(null)
-    const showChatPanel = ref(false)
-    const hoveredBlock = ref(null)
-    const chatMessages = ref([])
+    const isExporting = ref(false)
+    const threeContainer = ref(null)
     
-    // Tools
-    const tools = [
-      { id: 'place', name: 'Place Block', icon: '🧱' },
-      { id: 'remove', name: 'Remove Block', icon: '🗑️' },
-      { id: 'select', name: 'Select', icon: '👆' },
-      { id: 'fill', name: 'Fill Tool', icon: '🪣' }
-    ]
+    // Three.js refs
+    const scene = ref(null)
+    const camera = ref(null)
+    const renderer = ref(null)
+    const controls = ref(null)
     
     // Computed
     const currentModel = computed(() => voxelStore.currentModel)
-    const selectedBlockType = computed(() => voxelStore.selectedBlockType)
-    const selectedTool = computed(() => voxelStore.selectedTool)
-    const totalBlocks = computed(() => voxelStore.totalBlocks)
-    const modelDimensions = computed(() => voxelStore.modelDimensions)
-    const activeUsers = computed(() => voxelStore.activeUsers)
-    const isConnected = computed(() => voxelStore.isConnected)
-    const cameraPosition = computed(() => voxelStore.cameraPosition)
     
     // Methods
     const loadModel = async () => {
       try {
+        console.log('🎯 Editor: Starting to load model...')
         isLoading.value = true
         const modelId = props.modelId || route.params.modelId
         
@@ -179,337 +99,169 @@ export default {
         console.log('✅ Model loaded:', model)
         voxelStore.setCurrentModel(model)
         
-        // Connect to socket first
-        socketService.connect()
-        
-        // Wait for connection before joining room
-        const maxRetries = 5
-        let retryCount = 0
-        
-        const waitForConnection = () => {
-          return new Promise((resolve, reject) => {
-            const checkConnection = () => {
-              if (socketService.socket?.connected) {
-                console.log('🏠 Joining model room:', modelId)
-                socketService.joinModel(modelId, `User-${Date.now()}`)
-                resolve()
-              } else if (retryCount < maxRetries) {
-                retryCount++
-                console.log(`⏳ Waiting for socket connection... (${retryCount}/${maxRetries})`)
-                setTimeout(checkConnection, 1000)
-              } else {
-                reject(new Error('Socket connection timeout after ' + maxRetries + ' retries'))
-              }
-            }
-            checkConnection()
-          })
-        }
-        
-        await waitForConnection()
+        // Initialize 3D renderer after model is loaded
+        await nextTick()
+        await initThreeJS()
         
       } catch (err) {
         console.error('❌ Failed to load model:', err)
         error.value = `Failed to load model: ${err.message}`
       } finally {
+        console.log('🏁 Setting isLoading to false')
         isLoading.value = false
       }
     }
     
-    const initializeThreeJS = () => {
-      if (!threeCanvas.value) return
-      
-      console.log('🎨 Initializing Three.js with raw canvas element')
-      
-      // Get the raw DOM element, not the Vue ref
-      const rawCanvas = threeCanvas.value
-      
-      // Create renderer completely outside Vue's reactivity system
-      // We don't assign it to a ref to avoid Vue proxying
-      const renderer = markRaw(new VoxelRenderer(rawCanvas))
-      
-      // Store in a non-reactive property
-      Object.defineProperty(window, 'mcWebEditRenderer', {
-        value: renderer,
-        writable: true,
-        enumerable: false,
-        configurable: true
-      })
-      
-      // Store reference in component but mark as non-reactive
-      voxelRenderer.value = renderer
-      
-      // Use toRaw to strip reactivity from the entire store before passing it
-      const rawStore = toRaw(voxelStore)
-      console.log('📦 Setting voxel store (raw):', rawStore)
-      console.log('📦 Current model:', rawStore.currentModel)
-      console.log('📦 Model dimensions computed:', rawStore.modelDimensions)
-      renderer.setVoxelStore(rawStore)
-      
-      // Set up event listeners
-      renderer.onBlockHover = (position) => {
-        hoveredBlock.value = position
+    const initThreeJS = async () => {
+      try {
+        console.log('🎮 Editor: Initializing Three.js...')
+        
+        if (!threeContainer.value) {
+          throw new Error('Three.js container not found')
+        }
+        
+        const container = threeContainer.value
+        const width = container.clientWidth
+        const height = container.clientHeight
+        
+        console.log('🎮 Three.js container found, dimensions:', { width, height })
+        
+        // Create scene
+        scene.value = new THREE.Scene()
+        scene.value.background = new THREE.Color(0x222222)
+        
+        // Create camera
+        camera.value = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000)
+        camera.value.position.set(50, 50, 50)
+        camera.value.lookAt(0, 0, 0)
+        
+        // Create renderer
+        renderer.value = new THREE.WebGLRenderer({ antialias: true })
+        renderer.value.setSize(width, height)
+        renderer.value.shadowMap.enabled = true
+        renderer.value.shadowMap.type = THREE.PCFSoftShadowMap
+        
+        // Add renderer to DOM
+        container.appendChild(renderer.value.domElement)
+        
+        // Add basic lighting
+        const ambientLight = new THREE.AmbientLight(0x404040, 0.4)
+        scene.value.add(ambientLight)
+        
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8)
+        directionalLight.position.set(50, 100, 50)
+        directionalLight.castShadow = true
+        directionalLight.shadow.mapSize.width = 2048
+        directionalLight.shadow.mapSize.height = 2048
+        scene.value.add(directionalLight)
+        
+        // Add a test cube to verify rendering
+        const geometry = new THREE.BoxGeometry(2, 2, 2)
+        const material = new THREE.MeshLambertMaterial({ color: 0xff0000 })
+        const testCube = new THREE.Mesh(geometry, material)
+        testCube.position.set(0, 1, 0)
+        testCube.castShadow = true
+        scene.value.add(testCube)
+        
+        // Add orbit controls
+        controls.value = new OrbitControls(camera.value, renderer.value.domElement)
+        controls.value.enableDamping = true
+        controls.value.dampingFactor = 0.05
+        controls.value.screenSpacePanning = false
+        controls.value.minDistance = 10
+        controls.value.maxDistance = 500
+        controls.value.maxPolarAngle = Math.PI / 2
+        
+        // Start render loop
+        animate()
+        
+        console.log('✅ Three.js initialization completed')
+        
+      } catch (err) {
+        console.error('❌ Failed to initialize Three.js:', err)
+        error.value = `Failed to initialize 3D renderer: ${err.message}`
       }
-      
-      renderer.onBlockClick = (position, isRightClick) => {
-        handleBlockClick(position, isRightClick)
-      }
-      
-      renderer.onCameraMove = (position, target) => {
-        // Create completely new objects to avoid proxy issues
-        const newPosition = { x: position.x, y: position.y, z: position.z }
-        const newTarget = { x: target.x, y: target.y, z: target.z }
-        voxelStore.setCameraPosition(newPosition)
-        voxelStore.setCameraTarget(newTarget)
-      }
-      
-      console.log('✅ Three.js initialization complete')
     }
     
-    const handleBlockClick = (position, isRightClick) => {
-      const { x, y, z } = position
+    const animate = () => {
+      if (!renderer.value || !scene.value || !camera.value) return
       
-      console.log('🖱️ handleBlockClick called:', { x, y, z, isRightClick })
-      console.log('🔗 isConnected:', isConnected.value)
-      console.log('🛠️ selectedTool:', selectedTool.value)
-      console.log('🧱 selectedBlockType:', selectedBlockType.value)
+      requestAnimationFrame(animate)
       
-      // Check if socket is connected
-      if (!isConnected.value) {
-        error.value = 'Cannot place blocks: Not connected to server'
-        console.log('❌ Not connected to server')
-        return
+      // Update controls
+      if (controls.value) {
+        controls.value.update()
       }
       
-      // Check bounds
-      const dims = modelDimensions.value
-      if (x < 0 || x >= dims.width || 
-          y < 0 || y >= dims.height || 
-          z < 0 || z >= dims.length) {
-        console.log('❌ Block position out of bounds:', { x, y, z }, 'Dims:', dims)
-        return
-      }
-      
-      let newBlockType = 'minecraft:air'
-      
-      if (selectedTool.value === 'place' && !isRightClick) {
-        newBlockType = selectedBlockType.value
-      } else if (selectedTool.value === 'remove' || isRightClick) {
-        newBlockType = 'minecraft:air'
-      }
-      
-      console.log('🧱 Block placement logic result:', { 
-        selectedTool: selectedTool.value, 
-        isRightClick, 
-        newBlockType 
-      })
-      
-      // Update local store
-      console.log('📝 Updating local store...')
-      voxelStore.setBlock(x, y, z, newBlockType)
-      
-      // Update renderer immediately
-      console.log('🎨 Updating renderer...')
-      const renderer = voxelRenderer.value || window.mcWebEditRenderer
-      if (renderer) {
-        renderer.updateSingleBlock(x, y, z, newBlockType)
-      } else {
-        console.log('❌ voxelRenderer is null!')
-      }
-      
-      // Send to server and other clients
-      try {
-        console.log('📡 Sending to server...')
-        socketService.sendBlockChange(x, y, z, newBlockType)
-        // Note: We don't await the API call to keep interactions snappy
-        // The socket update will handle real-time sync
-        apiService.setBlock(currentModel.value.id, x, y, z, newBlockType)
-        console.log('✅ Block change sent successfully')
-      } catch (err) {
-        console.error('❌ Failed to sync block change:', err)
-        error.value = `Failed to sync block change: ${err.message}`
-      }
+      renderer.value.render(scene.value, camera.value)
     }
     
     const exportModel = async () => {
       try {
         isExporting.value = true
-        const blob = await apiService.exportSchematic(currentModel.value.id)
-        const filename = `${currentModel.value.name.replace(/[^a-zA-Z0-9]/g, '_')}.schem`
-        apiService.downloadFile(blob, filename)
+        console.log('📤 Exporting model...')
+        // Placeholder for export functionality
+        await new Promise(resolve => setTimeout(resolve, 1000)) // Simulate export
+        console.log('✅ Export completed')
       } catch (err) {
+        console.error('❌ Export failed:', err)
         error.value = `Export failed: ${err.message}`
       } finally {
         isExporting.value = false
       }
     }
     
-    const sendChatMessage = (message) => {
-      try {
-        socketService.sendChatMessage(message)
-      } catch (err) {
-        error.value = `Failed to send message: ${err.message}`
-      }
-    }
-    
-    const setSelectedBlockType = (blockType) => {
-      voxelStore.setSelectedBlockType(blockType)
-    }
-    
-    const setSelectedTool = (tool) => {
-      voxelStore.setSelectedTool(tool)
-    }
-    
-    const getCurrentTool = () => {
-      return tools.find(t => t.id === selectedTool.value)
-    }
-    
     const clearError = () => {
       error.value = null
     }
     
-    // Socket event handlers
-    const setupSocketListeners = () => {
-      socketService.on('connection-status', (connected) => {
-        console.log('🔌 Connection status changed:', connected)
-        voxelStore.setConnectionStatus(connected)
-      })
-      
-      socketService.on('room-users', (users) => {
-        console.log('👥 Room users updated:', users)
-        voxelStore.setActiveUsers(users)
-      })
-      
-      socketService.on('user-joined', (data) => {
-        voxelStore.setActiveUsers(data.activeUsers)
-        chatMessages.value.push({
-          type: 'system',
-          message: `${data.userName} joined`,
-          timestamp: new Date()
-        })
-      })
-      
-      socketService.on('user-left', (data) => {
-        voxelStore.setActiveUsers(data.activeUsers)
-        chatMessages.value.push({
-          type: 'system',
-          message: `${data.userName} left`,
-          timestamp: new Date()
-        })
-      })
-      
-      socketService.on('block-changed', (data) => {
-        // Update from other users
-        console.log('🔄 Received block change from other user:', data)
-        voxelStore.setBlock(data.x, data.y, data.z, data.blockType, data.blockData, data.properties)
-        
-        // Update renderer immediately
-        console.log('🎨 Updating renderer from socket event...')
-        const renderer = voxelRenderer.value || window.mcWebEditRenderer
-        if (renderer) {
-          renderer.updateSingleBlock(data.x, data.y, data.z, data.blockType)
-        } else {
-          console.log('❌ voxelRenderer is null in socket handler!')
-        }
-      })
-      
-      socketService.on('chat-message', (data) => {
-        chatMessages.value.push({
-          type: 'chat',
-          userId: data.userId,
-          userName: data.userName,
-          message: data.message,
-          timestamp: new Date(data.timestamp)
-        })
-      })
-      
-      socketService.on('error', (error) => {
-        error.value = `Socket error: ${error.message}`
-      })
-    }
-    
     // Lifecycle
     onMounted(async () => {
-      // Initialize connection status
-      voxelStore.setConnectionStatus(false)
+      console.log('🎯 Editor: Component mounted!');
+      console.log('🎯 Editor: Props modelId:', props.modelId);
+      console.log('🎯 Editor: Route params:', route.params);
       
-      setupSocketListeners()
       await loadModel()
-      initializeThreeJS()
-      
-      // Handle window resize
-      const handleResize = () => {
-        const renderer = voxelRenderer.value || window.mcWebEditRenderer
-        if (renderer) {
-          renderer.handleResize()
-        }
-      }
-      
-      window.addEventListener('resize', handleResize)
-      
-      // Cleanup function stored for onUnmounted
-      window.mcWebEditCleanup = () => {
-        window.removeEventListener('resize', handleResize)
-      }
     })
     
     onUnmounted(() => {
-      const renderer = voxelRenderer.value || window.mcWebEditRenderer
-      if (renderer) {
-        renderer.dispose()
+      console.log('🧹 Editor: Component unmounted, cleaning up...')
+      
+      // Cleanup Three.js resources
+      if (controls.value) {
+        controls.value.dispose()
       }
       
-      // Clean up the global reference
-      if (window.mcWebEditRenderer) {
-        delete window.mcWebEditRenderer
+      if (renderer.value) {
+        renderer.value.dispose()
+        if (threeContainer.value && renderer.value.domElement) {
+          threeContainer.value.removeChild(renderer.value.domElement)
+        }
       }
       
-      socketService.leaveModel()
-      
-      if (window.mcWebEditCleanup) {
-        window.mcWebEditCleanup()
-        delete window.mcWebEditCleanup
+      if (scene.value) {
+        // Dispose of all geometries and materials
+        scene.value.traverse((object) => {
+          if (object.geometry) object.geometry.dispose()
+          if (object.material) {
+            if (Array.isArray(object.material)) {
+              object.material.forEach(material => material.dispose())
+            } else {
+              object.material.dispose()
+            }
+          }
+        })
       }
     })
     
-    // Watch for dimension changes to update renderer
-    watch(() => voxelStore.modelDimensions, (newDims) => {
-      const renderer = voxelRenderer.value || window.mcWebEditRenderer
-      if (renderer && newDims) {
-        renderer.updateDimensions(newDims)
-      }
-    }, { deep: true })
-    
-    // Note: Block changes are now handled via updateSingleBlock for performance
-    
     return {
-      // Refs
-      threeCanvas,
       isLoading,
-      isExporting,
       error,
-      showChatPanel,
-      hoveredBlock,
-      chatMessages,
-      tools,
-      
-      // Computed
       currentModel,
-      selectedBlockType,
-      selectedTool,
-      totalBlocks,
-      modelDimensions,
-      activeUsers,
-      isConnected,
-      cameraPosition,
-      
-      // Methods
+      isExporting,
+      threeContainer,
       exportModel,
-      sendChatMessage,
-      setSelectedBlockType,
-      setSelectedTool,
-      getCurrentTool,
-      clearError,
-      getBlockName
+      clearError
     }
   }
 }
@@ -569,20 +321,15 @@ export default {
   justify-content: space-between;
   align-items: center;
   padding: 8px 16px;
-  background: rgba(0, 0, 0, 0.8);
-  border-bottom: 1px solid #333;
-  flex-shrink: 0;
+  background: #2d2d2d;
+  border-bottom: 1px solid #444;
+  min-height: 48px;
 }
 
 .toolbar-left {
   display: flex;
   align-items: center;
   gap: 16px;
-}
-
-.toolbar-center {
-  display: flex;
-  align-items: center;
 }
 
 .toolbar-right {
@@ -592,150 +339,72 @@ export default {
 }
 
 .model-name {
-  font-weight: 600;
-  color: #4CAF50;
+  font-weight: bold;
+  color: #fff;
 }
 
-.connection-status {
-  font-size: 0.9rem;
-  color: #f44336;
-}
-
-.connection-status.connected {
-  color: #4CAF50;
-}
-
-.tool-group {
-  display: flex;
-  gap: 4px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
-  padding: 4px;
-}
-
-.tool-group .btn {
-  padding: 8px 12px;
-  background: transparent;
-  border: none;
-  border-radius: 4px;
-}
-
-.tool-group .btn.active {
+.btn {
   background: #4CAF50;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
 }
 
-.content-area {
-  display: flex;
-  flex: 1;
-  overflow: hidden;
+.btn:hover {
+  background: #45a049;
 }
 
-.left-panel {
-  width: 280px;
-  flex-shrink: 0;
-  margin: 8px 0 8px 8px;
-  overflow-y: auto;
+.btn:disabled {
+  background: #666;
+  cursor: not-allowed;
 }
 
-.right-panel {
-  width: 320px;
-  flex-shrink: 0;
-  margin: 8px 8px 8px 0;
+.btn-secondary {
+  background: #666;
+}
+
+.btn-secondary:hover {
+  background: #777;
+}
+
+.debug-info {
+  padding: 16px;
+  background: #2d2d2d;
+  border-bottom: 1px solid #444;
+}
+
+.debug-info p {
+  margin: 4px 0;
+  font-family: monospace;
+  font-size: 12px;
+  color: #ccc;
 }
 
 .viewport-container {
   flex: 1;
   position: relative;
-  margin: 8px;
-  border-radius: 8px;
   overflow: hidden;
-  background: #000;
 }
 
-.three-canvas {
+.three-container {
   width: 100%;
   height: 100%;
-  display: block;
-}
-
-.viewport-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  pointer-events: none;
-  padding: 16px;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-}
-
-.viewport-info {
-  background: rgba(0, 0, 0, 0.7);
-  padding: 12px;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  backdrop-filter: blur(10px);
-}
-
-.viewport-info > div {
-  margin-bottom: 4px;
-}
-
-.viewport-info > div:last-child {
-  margin-bottom: 0;
-}
-
-.active-users {
-  background: rgba(0, 0, 0, 0.7);
-  padding: 12px;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  backdrop-filter: blur(10px);
-  max-width: 200px;
-}
-
-.users-header {
-  font-weight: 600;
-  margin-bottom: 8px;
-  color: #4CAF50;
-}
-
-.user-indicator {
-  background: rgba(76, 175, 80, 0.2);
-  padding: 4px 8px;
-  border-radius: 4px;
-  margin-bottom: 4px;
-  font-size: 0.8rem;
-}
-
-.user-indicator:last-child {
-  margin-bottom: 0;
-}
-
-.status-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 16px;
-  background: rgba(0, 0, 0, 0.8);
-  border-top: 1px solid #333;
-  font-size: 0.9rem;
-  flex-shrink: 0;
+  background: #111;
 }
 
 .error-toast {
   position: fixed;
   bottom: 24px;
-  right: 24px;
+  left: 50%;
+  transform: translateX(-50%);
   background: #f44336;
   color: white;
-  padding: 16px 24px;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  padding: 12px 24px;
+  border-radius: 6px;
   cursor: pointer;
   z-index: 1001;
-  max-width: 400px;
 }
 </style>
