@@ -180,6 +180,11 @@
     <div v-if="error" class="error-toast" @click="clearError">
       {{ error }}
     </div>
+    
+    <!-- Success Message -->
+    <div v-if="successMessage" class="success-toast" @click="clearSuccessMessage">
+      {{ successMessage }}
+    </div>
   </div>
 </template>
 
@@ -425,10 +430,49 @@ export default {
     const exportModel = async () => {
       try {
         isExporting.value = true
-        console.log('📤 Exporting model...')
-        // Placeholder for export functionality
-        await new Promise(resolve => setTimeout(resolve, 1000)) // Simulate export
-        console.log('✅ Export completed')
+        console.log('📤 Exporting model...', props.modelId)
+        
+        if (!props.modelId) {
+          throw new Error('No model ID available for export')
+        }
+        
+        // Clear any previous errors
+        error.value = null
+        
+        // Ensure we have the latest model data
+        console.log('🔄 Fetching latest model data before export...')
+        const latestModel = await apiService.getModel(props.modelId)
+        console.log('📊 Latest model data:', {
+          blocks: latestModel.blocks?.length || 0,
+          dimensions: latestModel.dimensions,
+          palette: latestModel.palette?.length || 0
+        })
+        
+        // Call the API to export the schematic
+        console.log('📦 Generating schematic file...')
+        const blob = await apiService.exportSchematic(props.modelId)
+        
+        if (!blob || blob.size === 0) {
+          throw new Error('Export returned empty file')
+        }
+        
+        console.log('💾 Downloaded schematic file:', blob.size, 'bytes')
+        
+        // Create download
+        const filename = `${currentModel.value?.name || 'voxel_model'}.schem`
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.style.display = 'none'
+        a.href = url
+        a.download = filename
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+        
+        console.log('✅ Export completed successfully:', filename)
+        // Show success feedback to user
+        showSuccessMessage(`Successfully exported ${filename}`)
       } catch (err) {
         console.error('❌ Export failed:', err)
         error.value = `Export failed: ${err.message}`
@@ -439,6 +483,20 @@ export default {
     
     const clearError = () => {
       error.value = null
+    }
+    
+    const successMessage = ref(null)
+    
+    const showSuccessMessage = (message) => {
+      successMessage.value = message
+      // Auto-clear success message after 5 seconds
+      setTimeout(() => {
+        successMessage.value = null
+      }, 5000)
+    }
+    
+    const clearSuccessMessage = () => {
+      successMessage.value = null
     }
     
     // Helper methods
@@ -1016,6 +1074,7 @@ export default {
       isLoading,
       isExporting,
       error,
+      successMessage,
       showChatPanel,
       hoveredBlock,
       chatMessages,
@@ -1045,6 +1104,7 @@ export default {
       setSelectedTool,
       getCurrentTool,
       clearError,
+      clearSuccessMessage,
       getBlockName,
       getSelectionSize,
       toggleShapeDropdown,
@@ -1272,6 +1332,19 @@ export default {
   top: 20px;
   right: 20px;
   background: #f44336;
+  color: white;
+  padding: 12px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  z-index: 1000;
+  max-width: 300px;
+}
+
+.success-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: #4CAF50;
   color: white;
   padding: 12px 16px;
   border-radius: 4px;

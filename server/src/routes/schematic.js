@@ -199,17 +199,28 @@ router.put('/model/:id', async (req, res) => {
  */
 router.post('/export-schematic/:id', async (req, res) => {
   try {
+    console.log('🚀 Export request received for model ID:', req.params.id);
+    
     const model = await VoxelModel.findById(req.params.id);
     
     if (!model) {
+      console.log('❌ Model not found:', req.params.id);
       return res.status(404).json({ error: 'Model not found' });
     }
+    
+    console.log('✅ Model found:', {
+      name: model.name,
+      blocks: model.blocks?.length || 0,
+      dimensions: { width: model.width, height: model.height, length: model.length }
+    });
     
     // Generate schematic file
     const schematicBuffer = await SchematicService.generateSchematic(model);
     
     // Set response headers for file download
     const fileName = `${model.name.replace(/[^a-zA-Z0-9]/g, '_')}.schem`;
+    console.log('📁 Sending file:', fileName, 'Size:', schematicBuffer.length, 'bytes');
+    
     res.setHeader('Content-Type', 'application/octet-stream');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.setHeader('Content-Length', schematicBuffer.length);
@@ -217,7 +228,7 @@ router.post('/export-schematic/:id', async (req, res) => {
     res.send(schematicBuffer);
     
   } catch (error) {
-    console.error('Export error:', error);
+    console.error('❌ Export error:', error);
     res.status(500).json({ 
       error: 'Failed to export schematic',
       message: error.message 
