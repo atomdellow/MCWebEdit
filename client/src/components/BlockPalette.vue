@@ -26,12 +26,23 @@
             :key="blockType"
             @click="selectBlock(blockType)"
             :class="['block-item', { selected: selectedBlockType === blockType }]"
-            :title="getBlockName(blockType)"
+            :title="getBlockTooltip(blockType)"
           >
             <div 
               class="block-preview" 
-              :style="{ backgroundColor: getBlockColorHex(blockType) }"
-            ></div>
+              :style="getBlockPreviewStyle(blockType)"
+            >
+              <!-- Show texture if available, otherwise use color -->
+              <img 
+                v-if="hasTexture(blockType)" 
+                :src="getBlockTextureUrl(blockType)" 
+                :alt="getBlockName(blockType)"
+                class="block-texture"
+                @error="onTextureError"
+              />
+              <!-- Multi-face texture indicator -->
+              <div v-if="isMultiFace(blockType)" class="multi-face-indicator" title="Multi-face texture">⚡</div>
+            </div>
             <div class="block-name">{{ getBlockName(blockType) }}</div>
           </div>
         </div>
@@ -42,7 +53,14 @@
 
 <script>
 import { ref, computed, onMounted } from 'vue'
-import { BLOCK_CATEGORIES, getBlockName, getBlockColor } from '@/utils/blockTypes'
+import { 
+  BLOCK_CATEGORIES, 
+  getBlockName, 
+  getBlockColor,
+  getBlockTexture,
+  hasCustomTexture,
+  isMultiFaceTexture
+} from '@/utils/blockTypes'
 
 export default {
   name: 'BlockPalette',
@@ -101,6 +119,48 @@ export default {
       return `#${color.toString(16).padStart(6, '0')}`
     }
     
+    const getBlockPreviewStyle = (blockType) => {
+      if (hasTexture(blockType)) {
+        // For blocks with textures, use a subtle background
+        return {
+          backgroundColor: 'rgba(255, 255, 255, 0.1)',
+          border: '1px solid rgba(255, 255, 255, 0.2)'
+        }
+      } else {
+        // For blocks without textures, use the color
+        return {
+          backgroundColor: getBlockColorHex(blockType),
+          border: '1px solid rgba(255, 255, 255, 0.2)'
+        }
+      }
+    }
+    
+    const getBlockTextureUrl = (blockType) => {
+      // Get the top texture for preview (most representative)
+      return getBlockTexture(blockType, 'top')
+    }
+    
+    const getBlockTooltip = (blockType) => {
+      const name = getBlockName(blockType)
+      if (isMultiFace(blockType)) {
+        return `${name} (Multi-face texture: top/side/bottom)`
+      }
+      return name
+    }
+    
+    const hasTexture = (blockType) => {
+      return hasCustomTexture(blockType)
+    }
+    
+    const isMultiFace = (blockType) => {
+      return isMultiFaceTexture(blockType)
+    }
+    
+    const onTextureError = (event) => {
+      // Hide the image if texture fails to load
+      event.target.style.display = 'none'
+    }
+    
     onMounted(() => {
       // Expand all categories by default
       Object.keys(BLOCK_CATEGORIES).forEach(category => {
@@ -115,7 +175,13 @@ export default {
       toggleCategory,
       selectBlock,
       getBlockName,
-      getBlockColorHex
+      getBlockColorHex,
+      hasTexture,
+      getBlockPreviewStyle,
+      getBlockTextureUrl,
+      getBlockTooltip,
+      isMultiFace,
+      onTextureError
     }
   }
 }
@@ -238,6 +304,22 @@ export default {
   pointer-events: none;
 }
 
+.texture-indicator {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  font-size: 8px;
+  background: rgba(76, 175, 80, 0.9);
+  border-radius: 50%;
+  width: 12px;
+  height: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  z-index: 1;
+}
+
 .block-name {
   font-size: 0.75rem;
   text-align: center;
@@ -249,22 +331,49 @@ export default {
   white-space: nowrap;
 }
 
-/* Scrollbar styling */
+/* Enhanced Scrollbar styling */
+.palette-content {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(76, 175, 80, 0.6) rgba(255, 255, 255, 0.1);
+}
+
 .palette-content::-webkit-scrollbar {
-  width: 6px;
+  width: 12px;
 }
 
 .palette-content::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  margin: 4px;
 }
 
 .palette-content::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.3);
-  border-radius: 3px;
+  background: linear-gradient(180deg, 
+    rgba(76, 175, 80, 0.8) 0%, 
+    rgba(76, 175, 80, 0.6) 50%, 
+    rgba(76, 175, 80, 0.4) 100%);
+  border-radius: 6px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.2s ease;
 }
 
 .palette-content::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.5);
+  background: linear-gradient(180deg, 
+    rgba(76, 175, 80, 1) 0%, 
+    rgba(76, 175, 80, 0.8) 50%, 
+    rgba(76, 175, 80, 0.6) 100%);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.palette-content::-webkit-scrollbar-thumb:active {
+  background: linear-gradient(180deg, 
+    rgba(56, 142, 60, 1) 0%, 
+    rgba(56, 142, 60, 0.8) 50%, 
+    rgba(56, 142, 60, 0.6) 100%);
+}
+
+/* Scrollbar corner */
+.palette-content::-webkit-scrollbar-corner {
+  background: rgba(255, 255, 255, 0.05);
 }
 </style>

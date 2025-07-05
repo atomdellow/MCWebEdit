@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCWebEdit - Block Texture Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #1a1a1a;
+            color: white;
+            padding: 20px;
+        }
+        .block-showcase {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        .block-example {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .block-name {
+            font-size: 1.2em;
+            margin-bottom: 15px;
+            color: #4CAF50;
+        }
+        .faces {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .face {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+        .face-image {
+            width: 64px;
+            height: 64px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .face-label {
+            font-size: 0.8em;
+            color: #ccc;
+        }
+        .arrow {
+            font-size: 1.5em;
+            color: #666;
+        }
+        .cube-preview {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 15px;
+            position: relative;
+            transform-style: preserve-3d;
+            transform: rotateX(-15deg) rotateY(45deg);
+        }
+        .cube-face {
+            position: absolute;
+            width: 80px;
+            height: 80px;
+        }
+        .front { transform: rotateY(0deg) translateZ(40px); }
+        .back { transform: rotateY(180deg) translateZ(40px); }
+        .right { transform: rotateY(90deg) translateZ(40px); }
+        .left { transform: rotateY(-90deg) translateZ(40px); }
+        .top { transform: rotateX(90deg) translateZ(40px); }
+        .bottom { transform: rotateX(-90deg) translateZ(40px); }
+    </style>
+</head>
+<body>
+    <h1>🎮 MCWebEdit - Block Texture System Demo</h1>
+    <p>This page demonstrates the multi-face texture system for Minecraft blocks.</p>
+    
+    <div class="block-showcase">
+        <!-- Grass Block -->
+        <div class="block-example">
+            <div class="block-name">🌱 Grass Block</div>
+            <div class="faces">
+                <div class="face">
+                    <img src="/assets/textures/blocks/grasstop.png" alt="Grass Top" class="face-image" onerror="this.style.background='#48B518'">
+                    <div class="face-label">Top</div>
+                </div>
+                <div class="arrow">→</div>
+                <div class="face">
+                    <img src="/assets/textures/blocks/grassside.png" alt="Grass Side" class="face-image" onerror="this.style.background='#6B8E23'">
+                    <div class="face-label">Side</div>
+                </div>
+                <div class="arrow">→</div>
+                <div class="face">
+                    <img src="/assets/textures/blocks/dirt.png" alt="Dirt Bottom" class="face-image" onerror="this.style.background='#8B4513'">
+                    <div class="face-label">Bottom</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Oak Log -->
+        <div class="block-example">
+            <div class="block-name">🪵 Oak Log</div>
+            <div class="faces">
+                <div class="face">
+                    <img src="/assets/textures/blocks/oak_log_topbottom.png" alt="Oak Log Top" class="face-image" onerror="this.style.background='#8B4513'">
+                    <div class="face-label">Top</div>
+                </div>
+                <div class="arrow">→</div>
+                <div class="face">
+                    <img src="/assets/textures/blocks/oak_log.png" alt="Oak Log Side" class="face-image" onerror="this.style.background='#6F4E37'">
+                    <div class="face-label">Side</div>
+                </div>
+                <div class="arrow">→</div>
+                <div class="face">
+                    <img src="/assets/textures/blocks/oak_log_topbottom.png" alt="Oak Log Bottom" class="face-image" onerror="this.style.background='#8B4513'">
+                    <div class="face-label">Bottom</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stone (Single Texture) -->
+        <div class="block-example">
+            <div class="block-name">🗿 Stone</div>
+            <div class="faces">
+                <div class="face">
+                    <img src="/assets/textures/blocks/stone.png" alt="Stone" class="face-image" onerror="this.style.background='#7F7F7F'">
+                    <div class="face-label">All Faces</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quartz Block -->
+        <div class="block-example">
+            <div class="block-name">💎 Quartz Block</div>
+            <div class="faces">
+                <div class="face">
+                    <img src="/assets/textures/blocks/quartz_block_topbottom.png" alt="Quartz Top" class="face-image" onerror="this.style.background='#F5F5DC'">
+                    <div class="face-label">Top</div>
+                </div>
+                <div class="arrow">→</div>
+                <div class="face">
+                    <img src="/assets/textures/blocks/quartz_block.png" alt="Quartz Side" class="face-image" onerror="this.style.background='#E5E5DC'">
+                    <div class="face-label">Side</div>
+                </div>
+                <div class="arrow">→</div>
+                <div class="face">
+                    <img src="/assets/textures/blocks/quartz_block_topbottom.png" alt="Quartz Bottom" class="face-image" onerror="this.style.background='#F5F5DC'">
+                    <div class="face-label">Bottom</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <h2>🎯 How It Works</h2>
+    <ul>
+        <li><strong>Multi-face blocks</strong> like grass have different textures for top, side, and bottom faces</li>
+        <li><strong>Directional blocks</strong> like logs have different textures for their ends vs. sides</li>
+        <li><strong>Simple blocks</strong> like stone use the same texture on all faces</li>
+        <li>The BlockPalette shows the <strong>top texture</strong> as a preview with a ⚡ indicator for multi-face blocks</li>
+        <li>In the 3D editor, each face renders with its <strong>correct texture</strong> for realistic appearance</li>
+    </ul>
+
+    <p><a href="/" style="color: #4CAF50;">← Back to MCWebEdit</a></p>
+</body>
+</html>

@@ -80,6 +80,9 @@ export default class VoxelRenderer {
       opacity: 0.8
     })
     
+    // Texture system
+    this.texturesEnabled = true // Enable textures by default
+    
     // Event callbacks
     this.onBlockHover = null
     this.onBlockClick = null
@@ -239,28 +242,75 @@ export default class VoxelRenderer {
     
     console.log('🏗️ Build area created:', dims)
   }
-  
-  getMaterial(blockType) {
+    getMaterial(blockType) {
     console.log(`🎨 getMaterial called with blockType: ${blockType}`)
     
     if (this.materials.has(blockType)) {
       console.log(`🎨 Returning cached material for ${blockType}`)
       return this.materials.get(blockType)
     }
-    
+
     const color = getBlockColor(blockType)
     const transparent = isTransparent(blockType)
     
     console.log(`🎨 Creating material for ${blockType}: color=0x${color.toString(16).padStart(6, '0')}, transparent=${transparent}`)
     
-    const material = new THREE.MeshLambertMaterial({ 
-      color: color,
-      transparent: transparent,
-      opacity: transparent ? 0.7 : 1.0
-    })
+    // Try to load texture first, fall back to color if texture not available
+    const texturePath = this.getTexturePath(blockType)
+    
+    let material
+    if (texturePath && this.texturesEnabled) {
+      // Create material with texture
+      const loader = new THREE.TextureLoader()
+      const texture = loader.load(
+        texturePath,
+        // onLoad
+        (tex) => {
+          console.log(`✅ Texture loaded for ${blockType}: ${texturePath}`)
+          tex.magFilter = THREE.NearestFilter // Pixelated look
+          tex.minFilter = THREE.NearestFilter
+          tex.wrapS = THREE.RepeatWrapping
+          tex.wrapT = THREE.RepeatWrapping
+        },
+        // onProgress
+        undefined,
+        // onError
+        (err) => {
+          console.log(`❌ Failed to load texture for ${blockType}: ${texturePath}`)
+          // Fallback to color material is handled by the loader
+        }
+      )
+      
+      material = new THREE.MeshLambertMaterial({
+        map: texture,
+        transparent: transparent,
+        opacity: transparent ? 0.7 : 1.0,
+        alphaTest: transparent ? 0.1 : 0
+      })
+    } else {
+      // Create solid color material
+      material = new THREE.MeshLambertMaterial({ 
+        color: color,
+        transparent: transparent,
+        opacity: transparent ? 0.7 : 1.0
+      })
+    }
     
     this.materials.set(blockType, material)
     return material
+  }
+  
+  getTexturePath(blockType) {
+    // Convert minecraft:block_name to /assets/textures/blocks/block_name.png
+    const blockName = blockType.replace('minecraft:', '')
+    return `/assets/textures/blocks/${blockName}.png`
+  }
+  
+  setTexturesEnabled(enabled) {
+    this.texturesEnabled = enabled
+    // Clear material cache to force recreation with/without textures
+    this.materials.clear()
+    console.log(`🎨 Textures ${enabled ? 'enabled' : 'disabled'}`)
   }
   
   addEventListeners() {
